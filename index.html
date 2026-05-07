@@ -1,0 +1,1876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Editor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #0f0f10;
+    --surface: #18181b;
+    --surface2: #1e1e22;
+    --border: #2a2a2f;
+    --border2: #35353c;
+    --accent: #e8c547;
+    --accent2: #f0d96a;
+    --accent-dim: rgba(232,197,71,0.12);
+    --text: #e8e8ea;
+    --text2: #9898a8;
+    --text3: #5a5a6a;
+    --red: #e85555;
+    --green: #4ecb71;
+    --blue: #4fa3e8;
+    --toolbar-h: 52px;
+    --sidebar-w: 200px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── TOOLBAR ── */
+  #toolbar {
+    height: var(--toolbar-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    flex-shrink: 0;
+    user-select: none;
+    overflow-x: auto;
+  }
+
+  .tb-logo {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    padding: 0 10px 0 4px;
+    margin-right: 4px;
+    border-right: 1px solid var(--border2);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tb-group {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    padding: 0 4px;
+    border-right: 1px solid var(--border2);
+    flex-shrink: 0;
+  }
+  .tb-group:last-child { border-right: none; }
+
+  .tb-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .tb-btn:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  .tb-btn.active { background: var(--accent-dim); color: var(--accent); }
+  .tb-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+  .tb-btn:disabled:hover { background: transparent; color: var(--text2); }
+  .tb-btn svg { flex-shrink: 0; }
+
+  .tb-btn.primary {
+    background: var(--accent);
+    color: #0f0f10;
+    font-weight: 700;
+  }
+  .tb-btn.primary:hover:not(:disabled) { background: var(--accent2); color: #0f0f10; }
+  .tb-btn.primary:disabled { background: var(--border2); color: var(--text3); }
+
+  /* page nav */
+  #page-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px solid var(--border2);
+    flex-shrink: 0;
+  }
+  #page-nav button {
+    width: 26px; height: 26px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s, color 0.1s;
+  }
+  #page-nav button:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+  #page-nav button:disabled { opacity: 0.28; cursor: not-allowed; }
+
+  /* clickable page indicator */
+  #page-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text2);
+    min-width: 60px;
+    text-align: center;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 3px 6px;
+    transition: background 0.1s;
+  }
+  #page-info:hover { background: var(--surface2); }
+  #page-input {
+    width: 48px;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    outline: none;
+    text-align: center;
+    display: none;
+  }
+
+  /* zoom */
+  #zoom-select {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  /* tool color/size inputs */
+  .tool-color {
+    width: 26px; height: 26px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    padding: 1px;
+    background: var(--surface2);
+    cursor: pointer;
+  }
+  .tool-size {
+    width: 42px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    outline: none;
+    text-align: center;
+  }
+
+  /* ── BODY ── */
+  #body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── THUMBNAIL SIDEBAR ── */
+  #thumbs {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) transparent;
+  }
+  #thumbs::-webkit-scrollbar { width: 4px; }
+  #thumbs::-webkit-scrollbar-track { background: transparent; }
+  #thumbs::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .thumb-item {
+    cursor: grab;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    overflow: hidden;
+    transition: border-color 0.12s;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .thumb-item:hover { border-color: var(--border2); }
+  .thumb-item.active { border-color: var(--accent); }
+  .thumb-item canvas { display: block; width: 100%; height: auto; image-rendering: auto; }
+  .thumb-item.dragging { opacity: 0.25; cursor: grabbing; }
+  #thumbs.dragging-active .thumb-item > * { pointer-events: none; }
+  .thumb-item.drag-over {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px var(--accent);
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .thumb-item.drag-over::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(232,197,71,0.18);
+    pointer-events: none;
+    z-index: 1;
+    border-radius: 2px;
+  }
+  /* drop indicator line above target */
+  .thumb-item.drag-over::after {
+    content: '';
+    position: absolute;
+    top: -5px; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* lazy-not-yet-rendered thumb placeholder */
+  .thumb-placeholder {
+    background: var(--surface2);
+    aspect-ratio: 0.707;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+
+  .thumb-label {
+    position: absolute;
+    bottom: 4px;
+    right: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(0,0,0,0.72);
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  }
+
+  /* ── CANVAS AREA ── */
+  #canvas-area {
+    flex: 1;
+    overflow: auto;
+    background: #161618;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px;
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border2) #161618;
+  }
+  #canvas-area::-webkit-scrollbar { width: 8px; height: 8px; }
+  #canvas-area::-webkit-scrollbar-track { background: #161618; }
+  #canvas-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+  /* empty state */
+  #empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex: 1;
+    color: var(--text3);
+    pointer-events: none;
+    min-height: 300px;
+  }
+  #empty-state svg { opacity: 0.3; }
+  #empty-state p { font-size: 14px; font-weight: 500; }
+  #empty-state small { font-size: 11px; color: var(--text3); }
+
+  /* page wrapper */
+  .page-wrapper {
+    position: relative;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+
+  /* pdf canvas */
+  .pdf-canvas { display: block; background: #fff; }
+
+  /* annotation overlay — pointer-events auto so annotations receive clicks */
+  .annot-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: auto;
+  }
+
+  /* draw canvas */
+  .draw-canvas {
+    position: absolute;
+    top: 0; left: 0;
+  }
+  .draw-canvas.inactive { pointer-events: none; cursor: default; }
+  .draw-canvas.active-draw { pointer-events: auto; cursor: crosshair; }
+  .draw-canvas.active-erase { pointer-events: auto; cursor: cell; }
+
+  /* text annotations */
+  .text-annot {
+    position: absolute;
+    cursor: move;
+    border: 1px dashed transparent;
+    padding: 2px 4px;
+    line-height: 1.2;
+    min-width: 20px;
+    min-height: 1em;
+    user-select: none;
+    transition: border-color 0.1s;
+    pointer-events: auto;
+  }
+  .text-annot:hover, .text-annot.selected { border-color: var(--accent); }
+  .text-annot .del-btn {
+    position: absolute;
+    top: -10px; right: -10px;
+    width: 18px; height: 18px;
+    background: var(--red);
+    border-radius: 50%;
+    display: none;
+    align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 10px;
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    z-index: 10;
+  }
+  .text-annot.selected .del-btn { display: flex; }
+
+  /* signature annotations */
+  .sig-annot {
+    position: absolute;
+    cursor: move;
+    border: 1px dashed transparent;
+    transition: border-color 0.1s;
+    pointer-events: auto;
+  }
+  .sig-annot:hover, .sig-annot.selected { border-color: var(--accent); }
+  .sig-annot img { display: block; width: 100%; height: 100%; }
+  .sig-annot .del-btn {
+    position: absolute;
+    top: -10px; right: -10px;
+    width: 18px; height: 18px;
+    background: var(--red);
+    border-radius: 50%;
+    display: none;
+    align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 10px;
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    z-index: 10;
+  }
+  .sig-annot.selected .del-btn { display: flex; }
+  .resize-handle {
+    position: absolute;
+    bottom: -4px; right: -4px;
+    width: 10px; height: 10px;
+    background: var(--accent);
+    border-radius: 2px;
+    cursor: se-resize;
+    display: none;
+  }
+  .sig-annot.selected .resize-handle { display: block; }
+
+  /* ── SIGNATURE MODAL ── */
+  #sig-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  #sig-modal.open { display: flex; }
+  #sig-modal-inner {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    min-width: 460px;
+  }
+  #sig-modal-inner h2 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
+  .sig-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .sig-tab {
+    padding: 6px 14px; border-radius: 5px; border: none; background: transparent;
+    color: var(--text2); font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: background 0.1s, color 0.1s;
+  }
+  .sig-tab.active { background: var(--accent-dim); color: var(--accent); }
+  .sig-tab-content { display: none; }
+  .sig-tab-content.active { display: block; }
+  #sig-draw-canvas {
+    border: 1px solid var(--border2); border-radius: 6px; background: #fff;
+    cursor: crosshair; display: block; touch-action: none;
+  }
+  #sig-type-input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; color: var(--text); font-size: 28px; font-family: 'Syne', sans-serif;
+    padding: 16px; outline: none; text-align: center; transition: border-color 0.15s;
+  }
+  #sig-type-input:focus { border-color: var(--accent); }
+  .sig-font-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .sig-font-opt {
+    padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border2);
+    background: var(--surface2); color: var(--text); cursor: pointer; font-size: 18px;
+    transition: border-color 0.1s;
+  }
+  .sig-font-opt.active { border-color: var(--accent); background: var(--accent-dim); }
+  .sig-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .sig-draw-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .sig-draw-controls label { font-size: 11px; color: var(--text2); }
+  #sig-pen-color { width: 26px; height: 26px; border-radius: 3px; border: 1px solid var(--border2); background: transparent; cursor: pointer; }
+  #sig-pen-size { width: 60px; background: var(--surface2); border: 1px solid var(--border2); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 4px 6px; border-radius: 4px; outline: none; text-align: center; }
+
+  /* ── STATUS BAR ── */
+  #statusbar {
+    height: 22px; background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px; gap: 16px; flex-shrink: 0;
+  }
+  #statusbar span { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3); }
+  #statusbar span b { color: var(--text2); font-weight: 400; }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 36px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); font-size: 12px; padding: 8px 16px; border-radius: 6px;
+    opacity: 0; transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 9999; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── PAGE CONTEXT MENU ── */
+  #page-ctx-menu {
+    display: none; position: fixed; background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 6px; padding: 4px; z-index: 2000; box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 160px;
+  }
+  #page-ctx-menu.open { display: block; }
+  .ctx-item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 4px;
+    font-size: 12px; color: var(--text2); cursor: pointer; transition: background 0.1s, color 0.1s;
+    border: none; background: none; width: 100%; text-align: left; font-family: 'Syne', sans-serif;
+  }
+  .ctx-item:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+  .ctx-item:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ctx-item.danger { color: var(--red); }
+  .ctx-item.danger:hover:not(:disabled) { background: rgba(232,85,85,0.12); color: var(--red); }
+  .ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <span class="tb-logo">◈ PDF</span>
+
+  <!-- File -->
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-open" title="Open PDF (Ctrl+O)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Open
+    </button>
+    <button class="tb-btn primary" id="btn-save" title="Save PDF (Ctrl+S)" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save
+    </button>
+  </div>
+
+  <!-- Navigation -->
+  <div id="page-nav">
+    <button id="btn-prev" title="Previous page (←)" disabled>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <span id="page-info" title="Click to jump to page">— / —</span>
+    <input id="page-input" type="number" min="1" title="Go to page">
+    <button id="btn-next" title="Next page (→)" disabled>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+  <!-- Zoom -->
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-zoom-out" title="Zoom out (- or Ctrl+-)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+    <select id="zoom-select">
+      <option value="0.5">50%</option>
+      <option value="0.75">75%</option>
+      <option value="1" selected>100%</option>
+      <option value="1.25">125%</option>
+      <option value="1.5">150%</option>
+      <option value="2">200%</option>
+    </select>
+    <button class="tb-btn" id="btn-zoom-in" title="Zoom in (+ or Ctrl+=)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+    </button>
+  </div>
+
+  <!-- Tools -->
+  <div class="tb-group">
+    <button class="tb-btn" id="tool-select" title="Select (V)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 1-4 7z"/></svg>
+      Select
+    </button>
+    <button class="tb-btn" id="tool-text" title="Add text (T)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+      Text
+    </button>
+    <button class="tb-btn" id="tool-draw" title="Freehand draw (D)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      Draw
+    </button>
+    <button class="tb-btn" id="tool-erase" title="Eraser (E)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6 11l4 4"/></svg>
+      Erase
+    </button>
+    <button class="tb-btn" id="tool-sign" title="Sign (S)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17c3.333-3.333 5-5 5-7 0-2-1-3-2-3s-3 1-3 4c0 3 2 4 4 4h3"/><path d="M11 11.5s.5-1.5 2-1.5 2 1.5 2 1.5v4s0 1.5 2 1.5 2-1.5 2-1.5"/></svg>
+      Sign
+    </button>
+  </div>
+
+  <!-- Text options -->
+  <div class="tb-group" id="text-options" style="display:none">
+    <input type="color" class="tool-color" id="color-input" value="#000000" title="Text color">
+    <input type="number" class="tool-size" id="font-size-input" value="16" min="6" max="120" title="Font size">
+  </div>
+
+  <!-- Draw/Erase options -->
+  <div class="tb-group" id="draw-options" style="display:none">
+    <input type="color" class="tool-color" id="draw-color-input" value="#000000" title="Stroke color">
+    <input type="number" class="tool-size" id="draw-size-input" value="2" min="1" max="60" title="Stroke width">
+    <button class="tb-btn" id="btn-clear-draw" title="Clear all drawing on this page">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Clear
+    </button>
+  </div>
+
+  <!-- Undo/Redo -->
+  <div class="tb-group">
+    <button class="tb-btn" id="btn-undo" title="Nothing to undo" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
+      Undo
+    </button>
+    <button class="tb-btn" id="btn-redo" title="Nothing to redo" disabled>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.49-4"/></svg>
+      Redo
+    </button>
+  </div>
+</div>
+
+<!-- BODY -->
+<div id="body">
+  <div id="thumbs"></div>
+  <div id="canvas-area">
+    <div id="empty-state">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      <p>No PDF open</p>
+      <small>Click "Open" or drag a file here</small>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span>Tool: <b id="stat-tool">—</b></span>
+  <span>Page: <b id="stat-page">—</b></span>
+  <span>Zoom: <b id="stat-zoom">100%</b></span>
+  <span id="stat-filename"></span>
+</div>
+
+<!-- SIGNATURE MODAL -->
+<div id="sig-modal">
+  <div id="sig-modal-inner">
+    <h2>Add Signature</h2>
+    <div class="sig-tabs">
+      <button class="sig-tab active" data-tab="draw">Draw</button>
+      <button class="sig-tab" data-tab="type">Type</button>
+    </div>
+    <div class="sig-tab-content active" id="tab-draw">
+      <div class="sig-draw-controls">
+        <label>Color:</label>
+        <input type="color" id="sig-pen-color" value="#000000">
+        <label>Width:</label>
+        <input type="number" id="sig-pen-size" value="2" min="1" max="10">
+        <button class="tb-btn" id="sig-clear-btn" style="margin-left:auto">Clear</button>
+      </div>
+      <canvas id="sig-draw-canvas" width="412" height="150"></canvas>
+    </div>
+    <div class="sig-tab-content" id="tab-type">
+      <input type="text" id="sig-type-input" placeholder="Your name" maxlength="60">
+      <div class="sig-font-picker">
+        <button class="sig-font-opt active" data-font="'Dancing Script', cursive" style="font-family:'Dancing Script',cursive">Signature</button>
+        <button class="sig-font-opt" data-font="'Caveat', cursive" style="font-family:'Caveat',cursive">Signature</button>
+        <button class="sig-font-opt" data-font="'Pacifico', cursive" style="font-family:'Pacifico',cursive">Signature</button>
+        <button class="sig-font-opt" data-font="'Syne', sans-serif" style="font-family:'Syne',sans-serif;font-weight:700">Signature</button>
+      </div>
+    </div>
+    <div class="sig-modal-actions">
+      <button class="tb-btn" id="sig-cancel-btn">Cancel</button>
+      <button class="tb-btn primary" id="sig-confirm-btn">Insert Signature</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- PAGE CONTEXT MENU -->
+<div id="page-ctx-menu">
+  <button class="ctx-item" id="ctx-move-up">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    Move up
+  </button>
+  <button class="ctx-item" id="ctx-move-down">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    Move down
+  </button>
+  <button class="ctx-item" id="ctx-move-first">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 17 12 11 6 17"/><polyline points="18 11 12 5 6 11"/></svg>
+    Move to first
+  </button>
+  <button class="ctx-item" id="ctx-move-last">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 7 12 13 18 7"/><polyline points="6 13 12 19 18 13"/></svg>
+    Move to last
+  </button>
+  <div class="ctx-sep"></div>
+  <button class="ctx-item danger" id="ctx-delete-page">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    Delete page
+  </button>
+</div>
+
+<input type="file" id="file-input" accept=".pdf" style="display:none">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Caveat:wght@600&family=Pacifico&display=swap" rel="stylesheet">
+
+<script>
+'use strict';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ──
+const state = {
+  pdfDoc:     null,
+  pdfBytes:   null,
+  fileName:   '',
+  totalPages: 0,
+  currentPage: 1,
+  zoom:       1,
+  tool:       'select',  // select | text | draw | erase | sign
+  annotations: {},       // { [pageNum]: { texts:[], sigs:[], drawDataURL:null } }
+  history:    [],
+  historyIdx: -1,
+};
+
+// page display order: pageOrder[pos] = original 1-based page num
+let pageOrder = [];
+// rendered DOM elements per original page num
+const pageEls = {};
+
+// ── DOM ──
+const $ = id => document.getElementById(id);
+const canvasArea  = $('canvas-area');
+const thumbsEl    = $('thumbs');
+const pageInfoEl  = $('page-info');
+const pageInputEl = $('page-input');
+const statTool    = $('stat-tool');
+const statPage    = $('stat-page');
+const statZoom    = $('stat-zoom');
+const statFilename = $('stat-filename');
+
+// ── Toast ──
+let toastTimer;
+function toast(msg, dur = 2000) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── Tools ──
+const toolBtns = {
+  select: $('tool-select'),
+  text:   $('tool-text'),
+  draw:   $('tool-draw'),
+  erase:  $('tool-erase'),
+  sign:   $('tool-sign'),
+};
+const toolNames = { select: 'Select', text: 'Text', draw: 'Draw', erase: 'Erase', sign: 'Sign' };
+
+function setTool(t) {
+  state.tool = t;
+  Object.entries(toolBtns).forEach(([k, btn]) => btn.classList.toggle('active', k === t));
+  $('text-options').style.display = t === 'text' ? '' : 'none';
+  $('draw-options').style.display = (t === 'draw' || t === 'erase') ? '' : 'none';
+  // color input irrelevant for erase
+  $('draw-color-input').style.visibility = t === 'erase' ? 'hidden' : '';
+  statTool.textContent = toolNames[t] || t;
+  refreshDrawCanvases();
+}
+
+// ── History ──
+const ACTION_LABELS = {
+  'add-text':    'Add text',
+  'delete-text': 'Delete text',
+  'add-sig':     'Add signature',
+  'delete-sig':  'Delete signature',
+  'draw':        'Draw',
+  'reorder':     'Reorder pages',
+  'delete-page': 'Delete page',
+};
+
+function pushHistory(action) {
+  state.history = state.history.slice(0, state.historyIdx + 1);
+  state.history.push(action);
+  state.historyIdx++;
+  updateUndoRedo();
+}
+
+function updateUndoRedo() {
+  const canUndo = state.historyIdx >= 0;
+  const canRedo = state.historyIdx < state.history.length - 1;
+  $('btn-undo').disabled = !canUndo;
+  $('btn-redo').disabled = !canRedo;
+  $('btn-undo').title = canUndo
+    ? `Undo: ${ACTION_LABELS[state.history[state.historyIdx]?.type] ?? 'Action'} (Ctrl+Z)`
+    : 'Nothing to undo';
+  $('btn-redo').title = canRedo
+    ? `Redo: ${ACTION_LABELS[state.history[state.historyIdx + 1]?.type] ?? 'Action'} (Ctrl+Y)`
+    : 'Nothing to redo';
+}
+
+$('btn-undo').addEventListener('click', undo);
+$('btn-redo').addEventListener('click', redo);
+
+async function undo() {
+  if (state.historyIdx < 0) return;
+  const action = state.history[state.historyIdx--];
+  await applyUndo(action);
+  updateUndoRedo();
+}
+async function redo() {
+  if (state.historyIdx >= state.history.length - 1) return;
+  const action = state.history[++state.historyIdx];
+  await applyRedo(action);
+  updateUndoRedo();
+}
+
+async function applyUndo(action) {
+  switch (action.type) {
+    case 'add-text': {
+      const a = getPageAnnots(action.page);
+      a.texts = a.texts.filter(t => t.id !== action.data.id);
+      document.querySelector(`.text-annot[data-id="${action.data.id}"]`)?.remove();
+      break;
+    }
+    case 'delete-text': {
+      const a = getPageAnnots(action.page);
+      a.texts.push(action.data);
+      renderTextAnnot(action.page, action.data);
+      break;
+    }
+    case 'add-sig': {
+      const a = getPageAnnots(action.page);
+      a.sigs = a.sigs.filter(s => s.id !== action.data.id);
+      document.querySelector(`.sig-annot[data-id="${action.data.id}"]`)?.remove();
+      break;
+    }
+    case 'delete-sig': {
+      const a = getPageAnnots(action.page);
+      a.sigs.push(action.data);
+      renderSigAnnot(action.page, action.data);
+      break;
+    }
+    case 'draw':
+      restoreDrawLayer(action.page, action.before);
+      break;
+    case 'reorder':
+      pageOrder = [...action.before];
+      await rebuildCanvasOrder();
+      rebuildThumbs();
+      break;
+    case 'delete-page':
+      pageOrder = [...action.before];
+      state.totalPages = pageOrder.length;
+      await rebuildCanvasOrder();
+      rebuildThumbs();
+      updatePageNav();
+      break;
+  }
+}
+
+async function applyRedo(action) {
+  switch (action.type) {
+    case 'add-text': {
+      const a = getPageAnnots(action.page);
+      a.texts.push(action.data);
+      renderTextAnnot(action.page, action.data);
+      break;
+    }
+    case 'delete-text': {
+      const a = getPageAnnots(action.page);
+      a.texts = a.texts.filter(t => t.id !== action.data.id);
+      document.querySelector(`.text-annot[data-id="${action.data.id}"]`)?.remove();
+      break;
+    }
+    case 'add-sig': {
+      const a = getPageAnnots(action.page);
+      a.sigs.push(action.data);
+      renderSigAnnot(action.page, action.data);
+      break;
+    }
+    case 'delete-sig': {
+      const a = getPageAnnots(action.page);
+      a.sigs = a.sigs.filter(s => s.id !== action.data.id);
+      document.querySelector(`.sig-annot[data-id="${action.data.id}"]`)?.remove();
+      break;
+    }
+    case 'draw':
+      restoreDrawLayer(action.page, action.after);
+      break;
+    case 'reorder':
+      pageOrder = [...action.after];
+      await rebuildCanvasOrder();
+      rebuildThumbs();
+      break;
+    case 'delete-page':
+      pageOrder = [...action.after];
+      state.totalPages = pageOrder.length;
+      if (pageEls[action.removedPage]) {
+        pageEls[action.removedPage].wrapper.remove();
+        delete pageEls[action.removedPage];
+      }
+      rebuildThumbs();
+      updatePageNav();
+      break;
+  }
+}
+
+function restoreDrawLayer(pageNum, dataURL) {
+  const a = getPageAnnots(pageNum);
+  a.drawDataURL = dataURL;
+  const dc = pageEls[pageNum]?.drawCanvas;
+  if (!dc) return;
+  const ctx = dc.getContext('2d');
+  ctx.clearRect(0, 0, dc.width, dc.height);
+  if (dataURL) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0);
+    img.src = dataURL;
+  }
+}
+
+// ── File open ──
+$('btn-open').addEventListener('click', () => $('file-input').click());
+$('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) loadPDF(file);
+  e.target.value = '';
+});
+canvasArea.addEventListener('dragover', e => e.preventDefault());
+canvasArea.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') loadPDF(file);
+});
+
+async function loadPDF(file) {
+  state.fileName = file.name;
+  statFilename.textContent = file.name;
+  const bytes = await file.arrayBuffer();
+  state.pdfBytes = new Uint8Array(bytes);
+  state.annotations = {};
+  state.history = [];
+  state.historyIdx = -1;
+  updateUndoRedo();
+
+  state.pdfDoc = await pdfjsLib.getDocument({ data: state.pdfBytes.slice() }).promise;
+  state.totalPages = state.pdfDoc.numPages;
+  state.currentPage = 1;
+  pageOrder = Array.from({ length: state.totalPages }, (_, i) => i + 1);
+
+  // clear canvas area
+  Object.keys(pageEls).forEach(k => delete pageEls[k]);
+  Array.from(canvasArea.querySelectorAll('.page-wrapper')).forEach(el => el.remove());
+  $('empty-state').style.display = 'none';
+
+  // render all pages (lazy: only visible ones render content)
+  await renderAllPages();
+  updatePageNav();
+  $('btn-save').disabled = false;
+  toast(`${file.name} loaded (${state.totalPages} pages)`);
+
+  // render thumbnails async without blocking
+  renderAllThumbsAsync();
+}
+
+// ── Annotations store ──
+function getPageAnnots(num) {
+  if (!state.annotations[num]) state.annotations[num] = { texts: [], sigs: [], drawDataURL: null };
+  return state.annotations[num];
+}
+
+// ── Page render (lazy via IntersectionObserver) ──
+const pageObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const wrapper = entry.target;
+      if (!wrapper.dataset.rendered) renderPageContent(wrapper);
+    }
+  });
+}, { root: canvasArea, rootMargin: '200px' });
+
+async function renderAllPages() {
+  // Create placeholder wrappers first (fast), observe for lazy render
+  for (const origPage of pageOrder) {
+    if (!pageEls[origPage]) {
+      await createPagePlaceholder(origPage);
+    }
+  }
+  // Immediately render current page without waiting for observer
+  if (pageEls[state.currentPage]) {
+    await renderPageContent(pageEls[state.currentPage].wrapper);
+  }
+  scrollToPage(state.currentPage);
+}
+
+async function createPagePlaceholder(pageNum) {
+  if (pageEls[pageNum]) return;
+  const page = await state.pdfDoc.getPage(pageNum);
+  const vp = page.getViewport({ scale: state.zoom });
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'page-wrapper';
+  wrapper.dataset.page = pageNum;
+  wrapper.style.width  = vp.width  + 'px';
+  wrapper.style.height = vp.height + 'px';
+  wrapper.style.background = '#fff';
+
+  const pdfCanvas = document.createElement('canvas');
+  pdfCanvas.className = 'pdf-canvas';
+  pdfCanvas.width  = vp.width;
+  pdfCanvas.height = vp.height;
+
+  const annotLayer = document.createElement('div');
+  annotLayer.className = 'annot-overlay';
+  annotLayer.style.width  = vp.width  + 'px';
+  annotLayer.style.height = vp.height + 'px';
+
+  const drawCanvas = document.createElement('canvas');
+  drawCanvas.className = 'draw-canvas inactive';
+  drawCanvas.width  = vp.width;
+  drawCanvas.height = vp.height;
+  setupDrawCanvas(drawCanvas, pageNum);
+
+  wrapper.append(pdfCanvas, annotLayer, drawCanvas);
+  canvasArea.appendChild(wrapper);
+  pageEls[pageNum] = { wrapper, pdfCanvas, annotLayer, drawCanvas, vp, rendered: false };
+
+  // click on annotLayer (has pointer-events:auto) or pdfCanvas to place items
+  annotLayer.addEventListener('click', e => handleCanvasClick(e, pageNum));
+  pdfCanvas.addEventListener('click', e => handleCanvasClick(e, pageNum));
+
+  pageObserver.observe(wrapper);
+}
+
+async function renderPageContent(wrapper) {
+  if (wrapper.dataset.rendered) return;
+  wrapper.dataset.rendered = '1';
+  const pageNum = +wrapper.dataset.page;
+  const els = pageEls[pageNum];
+  if (!els) return;
+
+  const page = await state.pdfDoc.getPage(pageNum);
+  await page.render({ canvasContext: els.pdfCanvas.getContext('2d'), viewport: els.vp }).promise;
+
+  // restore draw layer
+  const annots = getPageAnnots(pageNum);
+  if (annots.drawDataURL) {
+    const img = new Image();
+    img.onload = () => els.drawCanvas.getContext('2d').drawImage(img, 0, 0);
+    img.src = annots.drawDataURL;
+  }
+  annots.texts.forEach(t => renderTextAnnot(pageNum, t));
+  annots.sigs.forEach(s => renderSigAnnot(pageNum, s));
+}
+
+async function rebuildAllPages() {
+  // Save draw data URLs before destroying canvases
+  Object.entries(pageEls).forEach(([num, els]) => {
+    const a = getPageAnnots(+num);
+    if (els.rendered || els.wrapper.dataset.rendered) {
+      // capture current draw state (already in annotations)
+    }
+  });
+
+  pageObserver.disconnect();
+  Object.keys(pageEls).forEach(k => delete pageEls[k]);
+  Array.from(canvasArea.querySelectorAll('.page-wrapper')).forEach(el => el.remove());
+
+  for (const origPage of pageOrder) {
+    await createPagePlaceholder(origPage);
+  }
+  if (pageEls[state.currentPage]) {
+    await renderPageContent(pageEls[state.currentPage].wrapper);
+  }
+  scrollToPage(state.currentPage);
+}
+
+// Reorder canvas wrappers to match pageOrder without re-rendering.
+async function rebuildCanvasOrder() {
+  // Ensure every page has a DOM wrapper (lazy pages may not exist yet)
+  for (const origPage of pageOrder) {
+    if (!pageEls[origPage]) await createPagePlaceholder(origPage);
+  }
+  // Re-append in correct order (appendChild moves existing nodes)
+  for (const origPage of pageOrder) {
+    const els = pageEls[origPage];
+    if (els) canvasArea.appendChild(els.wrapper);
+  }
+}
+
+function scrollToPage(num) {
+  pageEls[num]?.wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function goToPage(num) {
+  if (!state.pdfDoc) return;
+  num = Math.max(1, Math.min(state.totalPages, num));
+  state.currentPage = num;
+  updatePageNav();
+  updateThumbActive();
+  if (!pageEls[num]) await createPagePlaceholder(num);
+  if (!pageEls[num]?.wrapper.dataset.rendered) await renderPageContent(pageEls[num].wrapper);
+  scrollToPage(num);
+}
+
+function updatePageNav() {
+  const hasPDF = !!state.pdfDoc;
+  pageInfoEl.textContent = hasPDF ? `${state.currentPage} / ${state.totalPages}` : '— / —';
+  $('btn-prev').disabled = !hasPDF || state.currentPage <= 1;
+  $('btn-next').disabled = !hasPDF || state.currentPage >= state.totalPages;
+  statPage.textContent   = hasPDF ? `${state.currentPage} / ${state.totalPages}` : '—';
+}
+
+$('btn-prev').addEventListener('click', () => goToPage(state.currentPage - 1));
+$('btn-next').addEventListener('click', () => goToPage(state.currentPage + 1));
+
+// Clickable page indicator → inline input
+pageInfoEl.addEventListener('click', () => {
+  if (!state.pdfDoc) return;
+  pageInfoEl.style.display = 'none';
+  pageInputEl.style.display = '';
+  pageInputEl.max = state.totalPages;
+  pageInputEl.value = state.currentPage;
+  pageInputEl.focus();
+  pageInputEl.select();
+});
+pageInputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter') commitPageInput();
+  if (e.key === 'Escape') cancelPageInput();
+});
+pageInputEl.addEventListener('blur', commitPageInput);
+function commitPageInput() {
+  const n = parseInt(pageInputEl.value);
+  cancelPageInput();
+  if (!isNaN(n)) goToPage(n);
+}
+function cancelPageInput() {
+  pageInputEl.style.display = 'none';
+  pageInfoEl.style.display = '';
+}
+
+// ── Zoom ──
+const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+$('zoom-select').addEventListener('change', async function() {
+  state.zoom = parseFloat(this.value);
+  statZoom.textContent = Math.round(state.zoom * 100) + '%';
+  if (state.pdfDoc) await rebuildAllPages();
+});
+$('btn-zoom-in').addEventListener('click', () => stepZoom(1));
+$('btn-zoom-out').addEventListener('click', () => stepZoom(-1));
+function stepZoom(dir) {
+  const idx = ZOOM_LEVELS.indexOf(state.zoom);
+  const next = ZOOM_LEVELS[Math.max(0, Math.min(ZOOM_LEVELS.length - 1, idx + dir))];
+  if (next === state.zoom) return;
+  $('zoom-select').value = next;
+  $('zoom-select').dispatchEvent(new Event('change'));
+}
+
+// Ctrl+scroll to zoom
+canvasArea.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  stepZoom(e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+
+// ── Thumbnails (async, non-blocking) ──
+let thumbRenderQueue = [];
+let thumbRenderRunning = false;
+
+function renderAllThumbsAsync() {
+  thumbsEl.innerHTML = '';
+  thumbRenderQueue = [...pageOrder.keys()].map(i => i);
+  // Create placeholders immediately
+  for (let pos = 0; pos < pageOrder.length; pos++) {
+    const origPage = pageOrder[pos];
+    const ph = document.createElement('div');
+    ph.className = 'thumb-item';
+    ph.dataset.page = origPage;
+    ph.dataset.pos  = pos;
+    ph.draggable    = true;
+    const inner = document.createElement('div');
+    inner.className = 'thumb-placeholder';
+    inner.textContent = pos + 1;
+    ph.appendChild(inner);
+    attachThumbEvents(ph, pos, origPage);
+    thumbsEl.appendChild(ph);
+  }
+  updateThumbActive();
+  if (!thumbRenderRunning) processThumbQueue();
+}
+
+async function processThumbQueue() {
+  thumbRenderRunning = true;
+  while (thumbRenderQueue.length > 0) {
+    const pos = thumbRenderQueue.shift();
+    const origPage = pageOrder[pos];
+    if (!origPage) continue;
+    const el = thumbsEl.querySelector(`.thumb-item[data-page="${origPage}"]`);
+    if (!el) continue;
+    await renderThumbContent(el, origPage, pos);
+    // yield to browser
+    await new Promise(r => setTimeout(r, 0));
+  }
+  thumbRenderRunning = false;
+}
+
+async function renderThumbContent(wrapper, origPage, pos) {
+  if (!state.pdfDoc) return;
+  try {
+    const page = await state.pdfDoc.getPage(origPage);
+    // Render at the actual display size so CSS scaling doesn't blur.
+    // Sidebar inner width = sidebar-w (200px) minus padding (8px×2) minus border (2px×2) = 180px.
+    // Use devicePixelRatio for sharp rendering on HiDPI displays.
+    // Render at 2× the display width for crisp thumbnails on all displays.
+    // CSS width:100% scales it down — browser downsamples cleanly from 2× → 1×.
+    const displayW  = 360; // 2× the 180px logical width
+    const naturalVp = page.getViewport({ scale: 1 });
+    const scale     = displayW / naturalVp.width;
+    const vp        = page.getViewport({ scale });
+    const c = document.createElement('canvas');
+    c.width  = vp.width;
+    c.height = vp.height;
+    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    const lbl = document.createElement('span');
+    lbl.className = 'thumb-label';
+    lbl.textContent = pos + 1;
+    wrapper.innerHTML = '';
+    wrapper.append(c, lbl);
+    attachThumbEvents(wrapper, pos, origPage);
+  } catch { /* page may have been deleted */ }
+}
+
+function thumbCurrentPos(wrapper) {
+  return Array.from(thumbsEl.children).indexOf(wrapper);
+}
+
+function attachThumbEvents(wrapper, _pos, origPage) {
+  wrapper.onclick = () => goToPage(origPage);
+  wrapper.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', String(thumbCurrentPos(wrapper)));
+    wrapper.classList.add('dragging');
+    requestAnimationFrame(() => thumbsEl.classList.add('dragging-active'));
+  });
+  wrapper.addEventListener('dragend', () => {
+    wrapper.classList.remove('dragging');
+    thumbsEl.classList.remove('dragging-active');
+  });
+  wrapper.addEventListener('dragover', e => { e.preventDefault(); wrapper.classList.add('drag-over'); });
+  wrapper.addEventListener('dragleave', e => {
+    if (!wrapper.contains(e.relatedTarget)) wrapper.classList.remove('drag-over');
+  });
+  wrapper.addEventListener('drop', e => {
+    e.preventDefault();
+    wrapper.classList.remove('drag-over');
+    const fromPos = parseInt(e.dataTransfer.getData('text/plain'));
+    const toPos   = thumbCurrentPos(wrapper);
+    if (toPos === -1 || fromPos === toPos) return; // -1 = detached wrapper
+    doReorderPage(fromPos, toPos);
+  });
+  wrapper.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    openPageCtxMenu(e.clientX, e.clientY, thumbCurrentPos(wrapper));
+  });
+}
+
+function updateThumbActive() {
+  thumbsEl.querySelectorAll('.thumb-item').forEach(el => {
+    el.classList.toggle('active', +el.dataset.page === state.currentPage);
+  });
+  thumbsEl.querySelector('.thumb-item.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+async function rebuildThumbs() {
+  thumbRenderQueue = [];
+  renderAllThumbsAsync();
+}
+
+// ── Page reorder ──
+async function doReorderPage(fromPos, toPos) {
+  const before = [...pageOrder];
+  const moved = pageOrder.splice(fromPos, 1)[0];
+  pageOrder.splice(toPos, 0, moved);
+  const after = [...pageOrder];
+  pushHistory({ type: 'reorder', before, after });
+  await rebuildCanvasOrder();
+  rebuildThumbs();
+  toast(`Page moved to position ${toPos + 1}`);
+}
+
+// ── Page context menu ──
+let ctxTargetPos = -1;
+
+function openPageCtxMenu(cx, cy, pos) {
+  ctxTargetPos = pos;
+  const menu = $('page-ctx-menu');
+  menu.classList.add('open');
+  const mw = 165, mh = 175;
+  menu.style.left = Math.min(cx, window.innerWidth  - mw - 8) + 'px';
+  menu.style.top  = Math.min(cy, window.innerHeight - mh - 8) + 'px';
+  $('ctx-move-up').disabled    = pos === 0;
+  $('ctx-move-down').disabled  = pos === pageOrder.length - 1;
+  $('ctx-move-first').disabled = pos === 0;
+  $('ctx-move-last').disabled  = pos === pageOrder.length - 1;
+}
+function closeCtxMenu() { $('page-ctx-menu').classList.remove('open'); }
+document.addEventListener('click',   e => { if (!e.target.closest('#page-ctx-menu')) closeCtxMenu(); });
+
+$('ctx-move-up').addEventListener('click',    () => { doReorderPage(ctxTargetPos, ctxTargetPos - 1); closeCtxMenu(); });
+$('ctx-move-down').addEventListener('click',  () => { doReorderPage(ctxTargetPos, ctxTargetPos + 1); closeCtxMenu(); });
+$('ctx-move-first').addEventListener('click', () => { doReorderPage(ctxTargetPos, 0); closeCtxMenu(); });
+$('ctx-move-last').addEventListener('click',  () => { doReorderPage(ctxTargetPos, pageOrder.length - 1); closeCtxMenu(); });
+
+$('ctx-delete-page').addEventListener('click', () => {
+  if (pageOrder.length <= 1) { toast('Cannot delete the only page'); closeCtxMenu(); return; }
+  const before      = [...pageOrder];
+  const removedPage = pageOrder[ctxTargetPos];
+  pageOrder.splice(ctxTargetPos, 1);
+  const after = [...pageOrder];
+  state.totalPages  = pageOrder.length;
+
+  if (pageEls[removedPage]) {
+    pageEls[removedPage].wrapper.remove();
+    delete pageEls[removedPage];
+  }
+  delete state.annotations[removedPage];
+  if (state.currentPage === removedPage) {
+    state.currentPage = pageOrder[Math.min(ctxTargetPos, pageOrder.length - 1)];
+  }
+  pushHistory({ type: 'delete-page', before, after, removedPage });
+  updatePageNav();
+  rebuildThumbs();
+  toast(`Page deleted`);
+  closeCtxMenu();
+});
+
+// ── Canvas click ──
+function handleCanvasClick(e, pageNum) {
+  // Ignore if click landed on an annotation (annotLayer children)
+  if (e.target.closest('.text-annot') || e.target.closest('.sig-annot')) return;
+  // Ignore if draw/erase tool active (handled by draw canvas)
+  if (state.tool === 'draw' || state.tool === 'erase') return;
+
+  const rect = pageEls[pageNum].wrapper.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (state.tool === 'text')   placeText(pageNum, x, y);
+  else if (state.tool === 'sign') openSignModal(pageNum, x, y);
+  else deselectAll();
+}
+
+// ── Text annotations ──
+function placeText(pageNum, x, y) {
+  const id       = Date.now() + Math.random();
+  const color    = $('color-input').value;
+  const fontSize = parseInt($('font-size-input').value) || 16;
+  const data     = { id, x, y, text: '', color, fontSize };
+  getPageAnnots(pageNum).texts.push(data);
+  renderTextAnnot(pageNum, data, true);
+  pushHistory({ type: 'add-text', page: pageNum, data: { ...data } });
+}
+
+function renderTextAnnot(pageNum, data, startEditing = false) {
+  const layer = pageEls[pageNum]?.annotLayer;
+  if (!layer) return;
+
+  const el = document.createElement('div');
+  el.className  = 'text-annot';
+  el.dataset.id = data.id;
+  el.style.cssText = `left:${data.x}px;top:${data.y}px;color:${data.color};font-size:${data.fontSize}px;font-family:Syne,sans-serif`;
+
+  const delBtn = document.createElement('button');
+  delBtn.className   = 'del-btn';
+  delBtn.textContent = '×';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const a = getPageAnnots(pageNum);
+    const idx = a.texts.findIndex(t => t.id === data.id);
+    if (idx >= 0) {
+      const removed = a.texts.splice(idx, 1)[0];
+      el.remove();
+      pushHistory({ type: 'delete-text', page: pageNum, data: { ...removed } });
+      toast('Text removed');
+    }
+  });
+
+  const span = document.createElement('span');
+  span.contentEditable = 'true';
+  span.textContent     = data.text || '';
+  span.style.cssText   = 'outline:none;display:block;min-width:40px;min-height:1em';
+  span.addEventListener('input', () => {
+    const t = getPageAnnots(pageNum).texts.find(t => t.id === data.id);
+    if (t) t.text = span.textContent;
+  });
+  span.addEventListener('blur', () => {
+    if (!span.textContent.trim()) {
+      const a = getPageAnnots(pageNum);
+      const idx = a.texts.findIndex(t => t.id === data.id);
+      if (idx >= 0) a.texts.splice(idx, 1);
+      el.remove();
+    }
+  });
+
+  el.append(delBtn, span);
+  makeDraggable(el, pageNum, data, 'texts');
+  el.addEventListener('click', e => { e.stopPropagation(); selectAnnot(el); });
+  layer.appendChild(el);
+
+  if (startEditing) {
+    selectAnnot(el);
+    setTimeout(() => { span.focus(); placeCursorAtEnd(span); }, 50);
+  }
+  return el;
+}
+
+function placeCursorAtEnd(el) {
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+// ── Signature modal ──
+let sigTarget    = null;
+let sigDrawing   = false;
+let sigCtx       = null;
+let activeTab    = 'draw';
+let activeSigFont = "'Dancing Script', cursive";
+
+function openSignModal(pageNum, x, y) {
+  sigTarget = { pageNum, x, y };
+  $('sig-modal').classList.add('open');
+  sigCtx = $('sig-draw-canvas').getContext('2d');
+  sigCtx.clearRect(0, 0, 412, 150);
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+}
+
+document.querySelectorAll('.sig-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeTab = btn.dataset.tab;
+    document.querySelectorAll('.sig-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.sig-tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-' + activeTab).classList.add('active');
+  });
+});
+
+document.querySelectorAll('.sig-font-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeSigFont = btn.dataset.font;
+    document.querySelectorAll('.sig-font-opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+const sigDrawCv = $('sig-draw-canvas');
+sigDrawCv.addEventListener('pointerdown', e => {
+  sigDrawing = true;
+  sigDrawCv.setPointerCapture(e.pointerId);
+  const p = sigCanvasPos(e);
+  sigCtx.strokeStyle = $('sig-pen-color').value;
+  sigCtx.lineWidth   = parseInt($('sig-pen-size').value) || 2;
+  sigCtx.beginPath();
+  sigCtx.moveTo(p.x, p.y);
+});
+sigDrawCv.addEventListener('pointermove', e => {
+  if (!sigDrawing) return;
+  sigCtx.strokeStyle = $('sig-pen-color').value;
+  sigCtx.lineWidth   = parseInt($('sig-pen-size').value) || 2;
+  const p = sigCanvasPos(e);
+  sigCtx.lineTo(p.x, p.y);
+  sigCtx.stroke();
+  sigCtx.beginPath();
+  sigCtx.moveTo(p.x, p.y);
+});
+sigDrawCv.addEventListener('pointerup', () => { sigDrawing = false; });
+function sigCanvasPos(e) {
+  const r = sigDrawCv.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+$('sig-clear-btn').addEventListener('click', () => sigCtx.clearRect(0, 0, 412, 150));
+$('sig-cancel-btn').addEventListener('click', () => { $('sig-modal').classList.remove('open'); sigTarget = null; });
+
+$('sig-confirm-btn').addEventListener('click', () => {
+  if (!sigTarget) return;
+  let sigCanvas;
+  if (activeTab === 'draw') {
+    const pixels = sigCtx.getImageData(0, 0, 412, 150).data;
+    if (!pixels.some((v, i) => i % 4 === 3 && v > 0)) { toast('Draw your signature first'); return; }
+    sigCanvas = cropCanvas($('sig-draw-canvas'));
+  } else {
+    const text = $('sig-type-input').value.trim();
+    if (!text) { toast('Type your name first'); return; }
+    sigCanvas = textToCanvas(text, activeSigFont);
+  }
+  const id     = Date.now() + Math.random();
+  const dataURL = sigCanvas.toDataURL();
+  const data = {
+    id,
+    x: sigTarget.x - sigCanvas.width / 2,
+    y: sigTarget.y - sigCanvas.height / 2,
+    width: sigCanvas.width, height: sigCanvas.height, dataURL,
+  };
+  getPageAnnots(sigTarget.pageNum).sigs.push(data);
+  renderSigAnnot(sigTarget.pageNum, data);
+  pushHistory({ type: 'add-sig', page: sigTarget.pageNum, data: { ...data } });
+  $('sig-modal').classList.remove('open');
+  sigTarget = null;
+  toast('Signature inserted');
+});
+
+function cropCanvas(src) {
+  const ctx = src.getContext('2d');
+  const { width: w, height: h } = src;
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (d[(y * w + x) * 4 + 3] > 10) { x0=Math.min(x0,x); y0=Math.min(y0,y); x1=Math.max(x1,x); y1=Math.max(y1,y); }
+  }
+  const pad = 8;
+  x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+  x1 = Math.min(w, x1 + pad); y1 = Math.min(h, y1 + pad);
+  const cw = x1 - x0 || w, ch = y1 - y0 || h;
+  const dst = document.createElement('canvas');
+  dst.width = cw; dst.height = ch;
+  dst.getContext('2d').putImageData(ctx.getImageData(x0, y0, cw, ch), 0, 0);
+  return dst;
+}
+
+function textToCanvas(text, font) {
+  // Measure first, then draw once at correct size
+  const offscreen = document.createElement('canvas');
+  offscreen.width = 600; offscreen.height = 80;
+  const ctx = offscreen.getContext('2d');
+  ctx.font = `48px ${font}`;
+  const tw = Math.min(ctx.measureText(text).width + 16, 600);
+  const cv = document.createElement('canvas');
+  cv.width = tw; cv.height = 80;
+  const c2 = cv.getContext('2d');
+  c2.font = `48px ${font}`;
+  c2.fillStyle = '#000';
+  c2.textBaseline = 'middle';
+  c2.fillText(text, 8, 40);
+  return cv;
+}
+
+// ── Sig annotation DOM ──
+function renderSigAnnot(pageNum, data) {
+  const layer = pageEls[pageNum]?.annotLayer;
+  if (!layer) return;
+
+  const el = document.createElement('div');
+  el.className  = 'sig-annot';
+  el.dataset.id = data.id;
+  el.style.cssText = `left:${data.x}px;top:${data.y}px;width:${data.width}px;height:${data.height}px`;
+
+  const img = document.createElement('img');
+  img.src = data.dataURL;
+
+  const delBtn = document.createElement('button');
+  delBtn.className   = 'del-btn';
+  delBtn.textContent = '×';
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    const a = getPageAnnots(pageNum);
+    const idx = a.sigs.findIndex(s => s.id === data.id);
+    if (idx >= 0) {
+      const removed = a.sigs.splice(idx, 1)[0];
+      el.remove();
+      pushHistory({ type: 'delete-sig', page: pageNum, data: { ...removed } });
+      toast('Signature removed');
+    }
+  });
+
+  const handle = document.createElement('div');
+  handle.className = 'resize-handle';
+  makeSigResize(el, handle, pageNum, data);
+
+  el.append(img, delBtn, handle);
+  makeDraggable(el, pageNum, data, 'sigs');
+  el.addEventListener('click', e => { e.stopPropagation(); selectAnnot(el); });
+  layer.appendChild(el);
+  return el;
+}
+
+// ── Draggable annotations ──
+function makeDraggable(el, pageNum, data, type) {
+  el.addEventListener('pointerdown', e => {
+    if (e.target.classList.contains('del-btn'))     return;
+    if (e.target.classList.contains('resize-handle')) return;
+    if (e.target.contentEditable === 'true')        return;
+    e.preventDefault();
+    selectAnnot(el);
+    const sx = e.clientX, sy = e.clientY;
+    const sl = parseFloat(el.style.left) || 0;
+    const st = parseFloat(el.style.top)  || 0;
+    el.setPointerCapture(e.pointerId);
+    const onMove = e => {
+      data.x = sl + (e.clientX - sx);
+      data.y = st + (e.clientY - sy);
+      el.style.left = data.x + 'px';
+      el.style.top  = data.y + 'px';
+      const a = getPageAnnots(pageNum);
+      const item = (type === 'texts' ? a.texts : a.sigs).find(i => i.id === data.id);
+      if (item) { item.x = data.x; item.y = data.y; }
+    };
+    const onUp = () => {
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+  });
+}
+
+function makeSigResize(el, handle, pageNum, data) {
+  handle.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    const sx = e.clientX, sw = data.width, sh = data.height;
+    handle.setPointerCapture(e.pointerId);
+    const ratio = sh / sw;
+    const onMove = e => {
+      const nw = Math.max(20, sw + (e.clientX - sx));
+      const nh = nw * ratio;
+      data.width = nw; data.height = nh;
+      el.style.width  = nw + 'px';
+      el.style.height = nh + 'px';
+      const s = getPageAnnots(pageNum).sigs.find(s => s.id === data.id);
+      if (s) { s.width = nw; s.height = nh; }
+    };
+    const onUp = () => { handle.removeEventListener('pointermove', onMove); handle.removeEventListener('pointerup', onUp); };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+  });
+}
+
+// ── Select ──
+function selectAnnot(el) { deselectAll(); el.classList.add('selected'); }
+function deselectAll() {
+  document.querySelectorAll('.text-annot.selected,.sig-annot.selected').forEach(el => el.classList.remove('selected'));
+}
+canvasArea.addEventListener('click', e => {
+  if (!e.target.closest('.text-annot') && !e.target.closest('.sig-annot')) deselectAll();
+});
+
+// ── Freehand draw + erase ──
+let isDrawing        = false;
+let drawBeforeURL    = null;
+
+function setupDrawCanvas(drawCanvas, pageNum) {
+  drawCanvas.addEventListener('pointerdown', e => {
+    if (state.tool !== 'draw' && state.tool !== 'erase') return;
+    isDrawing = true;
+    drawCanvas.setPointerCapture(e.pointerId);
+    drawBeforeURL = getPageAnnots(pageNum).drawDataURL;
+    const ctx = drawCanvas.getContext('2d');
+    const pos = drawPos(e, drawCanvas);
+    if (state.tool === 'erase') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = parseInt($('draw-size-input').value) * 4 || 20;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = $('draw-color-input').value;
+      ctx.lineWidth   = parseInt($('draw-size-input').value) || 2;
+    }
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  });
+
+  drawCanvas.addEventListener('pointermove', e => {
+    if (!isDrawing) return;
+    const ctx = drawCanvas.getContext('2d');
+    const pos = drawPos(e, drawCanvas);
+    if (state.tool === 'erase') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = parseInt($('draw-size-input').value) * 4 || 20;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = $('draw-color-input').value;
+      ctx.lineWidth   = parseInt($('draw-size-input').value) || 2;
+    }
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  });
+
+  drawCanvas.addEventListener('pointerup', () => {
+    if (!isDrawing) return;
+    isDrawing = false;
+    // reset composite mode
+    drawCanvas.getContext('2d').globalCompositeOperation = 'source-over';
+    const afterURL = drawCanvas.toDataURL();
+    getPageAnnots(pageNum).drawDataURL = afterURL;
+    pushHistory({ type: 'draw', page: pageNum, before: drawBeforeURL, after: afterURL });
+    drawBeforeURL = null;
+  });
+}
+
+function drawPos(e, canvas) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function refreshDrawCanvases() {
+  Object.entries(pageEls).forEach(([, els]) => {
+    const dc = els.drawCanvas;
+    dc.classList.remove('inactive', 'active-draw', 'active-erase');
+    if (state.tool === 'draw')  { dc.classList.add('active-draw');  }
+    else if (state.tool === 'erase') { dc.classList.add('active-erase'); }
+    else dc.classList.add('inactive');
+  });
+}
+
+$('btn-clear-draw').addEventListener('click', () => {
+  if (!state.pdfDoc) return;
+  const num = state.currentPage;
+  const dc  = pageEls[num]?.drawCanvas;
+  if (!dc) return;
+  const before = getPageAnnots(num).drawDataURL;
+  dc.getContext('2d').clearRect(0, 0, dc.width, dc.height);
+  getPageAnnots(num).drawDataURL = null;
+  pushHistory({ type: 'draw', page: num, before, after: null });
+  toast('Drawing cleared');
+});
+
+// ── Tool buttons ──
+$('tool-select').addEventListener('click', () => setTool('select'));
+$('tool-text').addEventListener('click',   () => setTool('text'));
+$('tool-draw').addEventListener('click',   () => setTool('draw'));
+$('tool-erase').addEventListener('click',  () => setTool('erase'));
+$('tool-sign').addEventListener('click',   () => {
+  if (!state.pdfDoc) { toast('Open a PDF first'); return; }
+  setTool('sign');
+  toast('Click on the page to place signature');
+});
+$('btn-save').addEventListener('click', saveFile);
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', e => {
+  const inInput = e.target.contentEditable === 'true' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT';
+  if (inInput) {
+    if (e.key === 'Escape') e.target.blur();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 'o' || e.key === 'O') { e.preventDefault(); $('file-input').click(); }
+    if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); }
+    if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    if (e.key === 'y' || e.key === 'Y') { e.preventDefault(); redo(); }
+    if (e.key === '=' || e.key === '+') { e.preventDefault(); stepZoom(1); }
+    if (e.key === '-')                  { e.preventDefault(); stepZoom(-1); }
+    return;
+  }
+  switch (e.key.toLowerCase()) {
+    case 'v': setTool('select'); break;
+    case 't': setTool('text');   break;
+    case 'd': setTool('draw');   break;
+    case 'e': setTool('erase');  break;
+    case 's': if (state.pdfDoc) setTool('sign'); break;
+    case '+': case '=': stepZoom(1);  break;
+    case '-':           stepZoom(-1); break;
+    case 'arrowleft':
+    case 'arrowup':   goToPage(state.currentPage - 1); break;
+    case 'arrowright':
+    case 'arrowdown': goToPage(state.currentPage + 1); break;
+    case 'delete':
+    case 'backspace': {
+      const sel = document.querySelector('.text-annot.selected,.sig-annot.selected');
+      if (sel) sel.querySelector('.del-btn')?.click();
+      break;
+    }
+    case 'escape': deselectAll(); closeCtxMenu(); cancelPageInput(); break;
+  }
+});
+
+// ── Scroll-based page tracking ──
+canvasArea.addEventListener('scroll', () => {
+  if (!state.pdfDoc) return;
+  const mid = canvasArea.scrollTop + canvasArea.clientHeight / 2;
+  let closest = state.currentPage, closestDist = Infinity;
+  Object.entries(pageEls).forEach(([num, els]) => {
+    const center = els.wrapper.offsetTop + els.wrapper.offsetHeight / 2;
+    const dist   = Math.abs(center - mid);
+    if (dist < closestDist) { closestDist = dist; closest = +num; }
+  });
+  if (closest !== state.currentPage) {
+    state.currentPage = closest;
+    updatePageNav();
+    updateThumbActive();
+  }
+});
+
+// ── Save ──
+async function saveFile() {
+  if (!state.pdfDoc || !state.pdfBytes) return;
+  toast('Saving...', 10000);
+  try {
+    const srcDoc = await PDFLib.PDFDocument.load(state.pdfBytes.slice());
+    const doc    = await PDFLib.PDFDocument.create();
+
+    for (const origPageNum of pageOrder) {
+      const [cp] = await doc.copyPages(srcDoc, [origPageNum - 1]);
+      doc.addPage(cp);
+    }
+
+    const helvetica = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const newPages  = doc.getPages();
+
+    for (let pos = 0; pos < pageOrder.length; pos++) {
+      const origPageNum = pageOrder[pos];
+      const annots      = state.annotations[origPageNum];
+      if (!annots) continue;
+      const page  = newPages[pos];
+      const pdfH  = page.getHeight();
+      const pageEl = pageEls[origPageNum];
+      const scale  = pageEl ? page.getWidth() / pageEl.pdfCanvas.width : 1;
+
+      for (const t of annots.texts) {
+        if (!t.text) continue;
+        const hex = t.color.replace('#', '');
+        page.drawText(t.text, {
+          x: t.x * scale,
+          y: pdfH - (t.y + t.fontSize) * scale,
+          size: t.fontSize * scale,
+          font: helvetica,
+          color: PDFLib.rgb(
+            parseInt(hex.slice(0, 2), 16) / 255,
+            parseInt(hex.slice(2, 4), 16) / 255,
+            parseInt(hex.slice(4, 6), 16) / 255,
+          ),
+        });
+      }
+
+      for (const s of annots.sigs) {
+        try {
+          const bytes = Uint8Array.from(atob(s.dataURL.split(',')[1]), c => c.charCodeAt(0));
+          const img   = await doc.embedPng(bytes);
+          page.drawImage(img, {
+            x: s.x * scale,
+            y: pdfH - (s.y + s.height) * scale,
+            width:  s.width  * scale,
+            height: s.height * scale,
+          });
+        } catch (err) { console.warn('sig embed', err); }
+      }
+
+      if (annots.drawDataURL) {
+        try {
+          const bytes = Uint8Array.from(atob(annots.drawDataURL.split(',')[1]), c => c.charCodeAt(0));
+          const img   = await doc.embedPng(bytes);
+          page.drawImage(img, { x: 0, y: 0, width: page.getWidth(), height: pdfH });
+        } catch (err) { console.warn('draw embed', err); }
+      }
+    }
+
+    const bytes = await doc.save();
+    const url   = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a     = document.createElement('a');
+    a.href     = url;
+    a.download = state.fileName.replace(/\.pdf$/i, '') + '_edited.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('PDF saved!');
+  } catch (err) {
+    console.error(err);
+    toast('Save error: ' + err.message, 4000);
+  }
+}
+
+// ── Init ──
+setTool('select');
+updatePageNav();
+</script>
+</body>
+</html>
